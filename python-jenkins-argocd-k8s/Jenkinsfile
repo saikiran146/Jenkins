@@ -1,67 +1,93 @@
 pipeline {
-    
-    agent any 
-    
+    agent any
+
     environment {
         IMAGE_TAG = "${BUILD_NUMBER}"
+        IMAGE_NAME = "abhishekf5/cicd-e2e"
+        REPO_URL = "https://github.com/saikiran146/Jenkins.git"
+        REPO_SUBDIR = "python-jenkins-argocd-k8s"
     }
-    
+
     stages {
-        
-        stage('Checkout'){
-           steps {
-                git credentialsId: 'f87a34a8-0e09-45e7-b9cf-6dc68feac670', 
-                url: 'https://github.com/iam-veeramalla/cicd-end-to-end',
-                branch: 'main'
-           }
-        }
 
-        stage('Build Docker'){
-            steps{
-                script{
-                    sh '''
-                    echo 'Buid Docker Image'
-                    docker build -t abhishekf5/cicd-e2e:${BUILD_NUMBER} .
-                    '''
+        stage('Checkout repo') {
+            steps {
+                // Checkout the whole repo (public) into a folder 'repo'
+                dir('repo') {
+                    git url: "${REPO_URL}", branch: 'main'
                 }
             }
         }
 
-        stage('Push the artifacts'){
-           steps{
-                script{
-                    sh '''
-                    echo 'Push to Repo'
-                    docker push abhishekf5/cicd-e2e:${BUILD_NUMBER}
-                    '''
-                }
-            }
-        }
-        
-        stage('Checkout K8S manifest SCM'){
+        stage('Build Docker (from subdir)') {
             steps {
-                git credentialsId: 'f87a34a8-0e09-45e7-b9cf-6dc68feac670', 
-                url: 'https://github.com/iam-veeramalla/cicd-demo-manifests-repo.git',
-                branch: 'main'
-            }
-        }
-        
-        stage('Update K8S manifest & push to Repo'){
-            steps {
-                script{
-                    withCredentials([usernamePassword(credentialsId: 'f87a34a8-0e09-45e7-b9cf-6dc68feac670', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
-                        sh '''
-                        cat deploy.yaml
-                        sed -i '' "s/32/${BUILD_NUMBER}/g" deploy.yaml
-                        cat deploy.yaml
-                        git add deploy.yaml
-                        git commit -m 'Updated the deploy yaml | Jenkins Pipeline'
-                        git remote -v
-                        git push https://github.com/iam-veeramalla/cicd-demo-manifests-repo.git HEAD:main
-                        '''                        
+                // Build using the subdirectory as context
+                dir("repo/${REPO_SUBDIR}") {
+                    script {
+                        sh """
+                        echo "Building docker image from ${REPO_SUBDIR}..."
+                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                        """
                     }
                 }
             }
+        }
+
+        stage('Push Docker Image (best-effort)') {
+            steps {
+                script {
+                    // Attempt a push; if not logged-in or not permitted this will print a message but not fail the pipeline
+                    sh '''
+                    echo "Attempting to push ${IMAGE_NAME}:${IMAGE_TAG} (will skip on permission error)"
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG} || echo "Docker push skipped or failed (no credentials / not permitted)"
+                    '''
+                }
+            }
+        }
+
+        stage('Update K8s manifest inside repo subdir') {
+            steps {
+                dir("repo/${REPO_SUBDIR}") {
+                    script {
+                        sh '''
+                        # show current manifest(s)
+                        echo "Listing yaml files in subdir:"
+                        ls -1 *.yaml || ls -1 */*.yaml || true
+                        
+                        # Example: update deploy.yaml if present (adjust filename if different)
+                        if [ -f deploy.yaml ]; then
+                          echo "Before update (deploy.yaml):"
+                          cat deploy.yaml
+
+                          # Linux sed replace — replace occurrences of 32 with build number (adjust pattern as needed)
+                          sed -i "s/32/${BUILD_NUMBER}/g" deploy.yaml
+
+                          echo "After update (deploy.yaml):"
+                          cat deploy.yaml
+
+                          # Configure git user so commit will succeed if allowed
+                          git config user.email "jenkins@example.com"
+                          git config user.name "Jenkins Pipeline"
+
+                          git add deploy.yaml
+                          git commit -m "Updated deploy.yaml: set image tag ${IMAGE_TAG} (Jenkins #${BUILD_NUMBER})" || echo "No changes to commit"
+
+                          # Attempt to push — will fail if no push permission; we catch that and continue
+                          git push origin HEAD:main || echo "Git push skipped or failed (no credentials / no permission)"
+                        else
+                          echo "deploy.yaml not found in ${REPO_SUBDIR}. Please adjust the manifest filename or path."
+                        fi
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline finished. (cleanup: docker logout if needed)"
+            sh 'docker logout || true'
         }
     }
 }
