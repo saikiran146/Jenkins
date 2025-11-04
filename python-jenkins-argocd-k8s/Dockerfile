@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
@@ -13,14 +13,14 @@ RUN apt-get update && \
       libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first to leverage docker cache if you have requirements.txt
+# Install pip deps (assumes requirements.txt exists)
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy project
 COPY . /app
 
-# Use an entrypoint to run migrations at runtime (not at build)
+# Migrations at container start (recommended) - entrypoint below
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
