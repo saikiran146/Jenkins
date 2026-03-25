@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE_TAG = "${BUILD_NUMBER}"
-        IMAGE_NAME = "abhishekf5/cicd-e2e"
+        IMAGE_NAME = "saikiranmara/cicd-e2e"
         REPO_URL = "https://github.com/saikiran146/Jenkins.git"
         REPO_SUBDIR = "python-jenkins-argocd-k8s"
     }
