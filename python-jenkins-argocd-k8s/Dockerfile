@@ -6,7 +6,6 @@ WORKDIR /app
 # Install OS deps including distutils (available on this image)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      python3-distutils \
       build-essential \
       gcc \
       libssl-dev \
