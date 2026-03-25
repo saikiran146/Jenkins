@@ -12,89 +12,53 @@ pipeline {
 
         stage('Checkout repo') {
             steps {
-                // Checkout the whole repo (public) into a folder 'repo'
                 dir('repo') {
                     git url: "${REPO_URL}", branch: 'main'
                 }
             }
         }
 
-        stage('Build Docker (from subdir)') {
+        stage('Build Docker') {
             steps {
-                // Build using the subdirectory as context
                 dir("repo/${REPO_SUBDIR}") {
-                    script {
-                        sh """
-                        echo "Building docker image from ${REPO_SUBDIR}..."
-                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                        """
-                    }
-                }
-            }
-        }
-       stage('Docker Login & Push') {
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-hub',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-        )]) {
-            sh '''
-            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-            docker push ${IMAGE_NAME}:${IMAGE_TAG}
-            '''
-        }
-    }
-}
-        }
-    }
-}
-        stage('Push Docker Image (best-effort)') {
-            steps {
-                script {
-                    // Attempt a push; if not logged-in or not permitted this will print a message but not fail the pipeline
                     sh '''
-                    echo "Attempting to push ${IMAGE_NAME}:${IMAGE_TAG} (will skip on permission error)"
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG} || echo "Docker push skipped or failed (no credentials / not permitted)"
+                    echo "Building docker image..."
+                    docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                     '''
                 }
             }
         }
 
-        stage('Update K8s manifest inside repo subdir') {
+        stage('Docker Login & Push') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-hub',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    '''
+                }
+            }
+        }
+
+        stage('Update K8s Manifest') {
             steps {
                 dir("repo/${REPO_SUBDIR}") {
-                    script {
-                        sh '''
-                        # show current manifest(s)
-                        echo "Listing yaml files in subdir:"
-                        ls -1 *.yaml || ls -1 */*.yaml || true
-                        
-                        # Example: update deploy.yaml if present (adjust filename if different)
-                        if [ -f deploy.yaml ]; then
-                          echo "Before update (deploy.yaml):"
-                          cat deploy.yaml
+                    sh '''
+                    echo "Checking YAML files..."
+                    ls deploy/*.yaml || true
 
-                          # Linux sed replace — replace occurrences of 32 with build number (adjust pattern as needed)
-                          sed -i "s/32/${BUILD_NUMBER}/g" deploy.yaml
-
-                          echo "After update (deploy.yaml):"
-                          cat deploy.yaml
-
-                          # Configure git user so commit will succeed if allowed
-                          git config user.email "jenkins@example.com"
-                          git config user.name "Jenkins Pipeline"
-
-                          git add deploy.yaml
-                          git commit -m "Updated deploy.yaml: set image tag ${IMAGE_TAG} (Jenkins #${BUILD_NUMBER})" || echo "No changes to commit"
-
-                          # Attempt to push — will fail if no push permission; we catch that and continue
-                          git push origin HEAD:main || echo "Git push skipped or failed (no credentials / no permission)"
-                        else
-                          echo "deploy.yaml not found in ${REPO_SUBDIR}. Please adjust the manifest filename or path."
-                        fi
-                        '''
-                    }
+                    if [ -f deploy/deploy.yaml ]; then
+                      sed -i "s|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g" deploy/deploy.yaml
+                      echo "Updated deploy.yaml:"
+                      cat deploy/deploy.yaml
+                    else
+                      echo "deploy.yaml not found"
+                    fi
+                    '''
                 }
             }
         }
@@ -102,7 +66,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished. (cleanup: docker logout if needed)"
+            echo "Pipeline finished"
             sh 'docker logout || true'
         }
     }
