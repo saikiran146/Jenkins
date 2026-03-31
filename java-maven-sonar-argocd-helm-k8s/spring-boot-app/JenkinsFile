@@ -13,7 +13,15 @@ pipeline {
                 // git branch: 'main', url: 'https://github.com/saikiran146/Jenkins-Zero-To-Hero.git'
             }
         }
-
+        stage('Fix Permissions') {
+    steps {
+        sh '''
+        cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
+        chmod -R 777 target || true
+        rm -rf target || true
+        '''
+    }
+}
         stage('Build and Test') {
             steps {
                 sh 'ls -ltr'
