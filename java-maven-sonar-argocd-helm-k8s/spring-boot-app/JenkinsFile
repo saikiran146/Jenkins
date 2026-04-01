@@ -8,6 +8,11 @@ pipeline {
                 sh 'echo passed'
             }
         }
+    stage('Clean Workspace') {
+    steps {
+        deleteDir()
+    }
+}
 
         stage('Build and Test') {
             steps {
