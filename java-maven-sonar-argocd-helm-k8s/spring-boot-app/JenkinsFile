@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.9.6-eclipse-temurin-17'
-            args '-u root'
-        }
-    }
+    agent any   // 👈 run everything on host
 
     stages {
 
@@ -16,8 +11,10 @@ pipeline {
 
         stage('Build and Test') {
             steps {
-                sh 'ls -ltr'
-                sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn clean package'
+                sh '''
+                cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
+                mvn clean package
+                '''
             }
         }
 
@@ -38,12 +35,9 @@ pipeline {
         }
 
         stage('Build and Push Docker Image') {
-            agent any   // run on host (Docker available)
-
             environment {
                 DOCKER_IMAGE = "saikiranmara/ultimate-cicd:${BUILD_NUMBER}"
             }
-
             steps {
                 script {
                     sh '''
