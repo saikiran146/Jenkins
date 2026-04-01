@@ -1,18 +1,20 @@
 pipeline {
-    agent any   // 👈 run everything on host
+    agent any
 
     stages {
+
+        stage('Clean Workspace') {
+            steps {
+                deleteDir()
+            }
+        }
 
         stage('Checkout') {
             steps {
                 sh 'echo passed'
+                // OR use git checkout properly if needed
             }
         }
-    stage('Clean Workspace') {
-    steps {
-        deleteDir()
-    }
-}
 
         stage('Build and Test') {
             steps {
